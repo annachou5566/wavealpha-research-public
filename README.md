@@ -1,0 +1,8 @@
+# Public historical-data regression
+A small, independently written public test utility for Binance USD-M BTCUSDT historical OHLCV integrity and conservative OHLC barrier semantics. This is not a trading bot, alpha optimizer, production engine or private research repository. No credentials, external AI calls, paid runners, private data, or 2026 data. No vendor data is committed or uploaded as artifacts. No third-party source code copied; source format is documented at https://github.com/binance/binance-public-data.
+
+Run locally: `python3 -m unittest -v test_regression.py`. Verify a single public fixture: `python3 audit.py --month 2020-01 --download`. Offline: `python3 audit.py --folder /path/to/archives --month 2024-01`. The output SHA256, CRC and exact timestamp checks are printed to stdout. This utility fails closed on incomplete data and does not silently repair gaps. Reference barrier semantics deliberately choose the stop before the target on ambiguous bars; this is not evidence of live fills.
+
+CI: push-triggered unit tests; manual or weekly test of one historical month. Standard public Ubuntu runner, 8-minute cap, read-only permissions, no secrets, no artifact/cache upload, one concurrency group. Do not use CI as a general-purpose compute farm or run unbounded workloads. Scheduled events can be delayed or disabled after inactivity. See https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features.
+
+Use Actions > Public historical-data regression > Run workflow to test one month. Do not add private trading code, checkpoints, account data, or API keys. Full research remains separate.
