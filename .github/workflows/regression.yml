@@ -8,6 +8,13 @@ on:
         description: 'One historical TRAIN month (2020-01 to 2025-12)'
         default: '2020-01'
         type: string
+      scope:
+        description: 'Fixture coverage'
+        type: choice
+        default: single
+        options:
+          - single
+          - train_2020_23
   schedule:
     - cron: '23 3 * * 1'
 permissions:
@@ -25,7 +32,25 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest -v test_regression.py
-      - name: Verify one Binance archive
+      - name: Verify historical archive coverage
         env:
           MONTH: ${{ inputs.month || '2020-01' }}
-        run: python3 audit.py --month "$MONTH" --download
+          FULL: ${{ inputs.scope == 'train_2020_23' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[coverage-48]')) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, tempfile
+          from audit import audit
+          months = [f'{y}-{m:02}' for y in range(2020,2024) for m in range(1,13)] if os.environ['FULL']=='true' else [os.environ['MONTH']]
+          passed, failed, rows = 0, [], 0
+          for month in months:
+              try:
+                  with tempfile.TemporaryDirectory() as folder:
+                      result=audit(month,folder,True)
+                  print(json.dumps(result),flush=True)
+                  passed+=1; rows+=result['rows']
+              except Exception as e:
+                  failed.append(month)
+                  print(json.dumps({'month':month,'status':'FAIL','reason':str(e)}),flush=True)
+          print(json.dumps({'coverage_receipt':True,'requested':len(months),'passed':passed,'failed':failed,'verified_rows':rows}),flush=True)
+          if failed: raise SystemExit(1)
+          PY
