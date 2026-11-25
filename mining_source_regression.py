@@ -73,4 +73,24 @@ def screen(m,p):
          result['economic_gate']=n>=60 and result['net32']>0 and min(halves)>0 and result['matched_delta32']>0 and result['long_delta32']>0
          results.append(result)
     print(json.dumps(dict(screen='economic diagnostic only; daily open to open; no risk sizing or funding; publication vintage unknown',vectors=len(results),unique_paths=len(paths),passes=sum(r['economic_gate'] for r in results),results=results)),flush=True)
-if __name__=='__main__':screen(mining(),prices())
+def mining_legacy():
+    # Legacy public chart API only. No paid x402/API key. Annual fixed-date requests.
+    data={}; hashes=[]
+    for year in range(2019,2026):
+        a=max(START,dt.date(year,1,1)); b=min(END,dt.date(year,12,31))
+        cols=[]
+        for metric in ('difficulty','hash-rate'):
+            params=dict(start=str(a),timespan=str((b-a).days+1)+'days',sampled='false',format='json')
+            raw=get('https://api.blockchain.info/charts/'+metric+'?'+urllib.parse.urlencode(params))
+            hashes.append(hashlib.sha256(raw).hexdigest()); obj=json.loads(raw); vals={}
+            for r in obj['values']:
+                d=dt.datetime.fromtimestamp(r['x'],dt.timezone.utc).date()
+                check(a<=d<=b and d not in vals,'unexpected chart date/duplicate')
+                v=float(r['y']);check(math.isfinite(v) and v>0,'invalid chart metric');vals[d]=v
+            check(set(vals)==set(days(a,b)),'daily chart coverage gap');cols.append(vals)
+        for d in days(a,b):data[d]=(cols[0][d],cols[1][d])
+    print(json.dumps(dict(source='Blockchain.com legacy public charts',rows=len(data),sha256_by_request=hashes,source_gate='coverage_only_no_vintage')),flush=True)
+    return data
+
+if __name__=='__main__':screen(mining_legacy(),prices())
+
