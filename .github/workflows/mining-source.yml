@@ -1,0 +1,20 @@
+name: Historical mining source integration
+on:
+  push:
+    paths: ['mining_source_regression.py', '.github/workflows/mining-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: historical-mining-source
+  cancel-in-progress: false
+jobs:
+  source-regression:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python3 mining_source_regression.py
