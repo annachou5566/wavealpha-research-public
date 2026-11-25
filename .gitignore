@@ -1,0 +1,7 @@
+data/
+__pycache__/
+*.zip
+*.CHECKSUM
+*.CHECKSUM.bin
+.env*
+*.key
