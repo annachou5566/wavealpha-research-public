@@ -1,7 +1,7 @@
 name: Historical mining source integration
 on:
-  push:
-    paths: ['mining_source_regression.py', '.github/workflows/mining-source.yml']
+  # Manual only: external source contract is unresolved (R13 SOURCE HOLD).
+  # Do not launch on pushes or schedules; retain fail-closed data validation.
   workflow_dispatch:
 permissions:
   contents: read
