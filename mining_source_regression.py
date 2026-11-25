@@ -151,9 +151,7 @@ def selftest():
         def validate(self, rows):
             return validate_chart({'values': rows}, self.a, self.b)
         def rejects(self, rows, reason):
-            with self.assertRaisesRegex(SourceContractError, '^' + reason + '
-
-):
+            with self.assertRaisesRegex(SourceContractError, '^' + reason + '$'):
                 self.validate(rows)
         def test_valid(self): self.assertEqual(len(self.validate(self.rows)), 3)
         def test_reverse_order(self): self.assertEqual(len(self.validate(self.rows[::-1])), 3)
@@ -164,14 +162,10 @@ def selftest():
         def test_nonpositive(self): self.rejects([dict(self.rows[0], y=0)] + self.rows[1:], 'INVALID_METRIC')
         def test_nan(self): self.rejects([dict(self.rows[0], y=float('nan'))] + self.rows[1:], 'INVALID_METRIC')
         def test_schema(self):
-            with self.assertRaisesRegex(SourceContractError, '^INVALID_SCHEMA
-
-): validate_chart({}, self.a, self.b)
+            with self.assertRaisesRegex(SourceContractError, '^INVALID_SCHEMA$'): validate_chart({}, self.a, self.b)
         def test_timestamp_type(self): self.rejects([dict(self.rows[0], x='1577836800')] + self.rows[1:], 'INVALID_ROW')
         def test_sealed_request(self):
-            with self.assertRaisesRegex(SourceContractError, '^REQUEST_OUTSIDE_TRAIN
-
-): validate_chart({}, dt.date(2026, 1, 1), dt.date(2026, 1, 2))
+            with self.assertRaisesRegex(SourceContractError, '^REQUEST_OUTSIDE_TRAIN$'): validate_chart({}, dt.date(2026, 1, 1), dt.date(2026, 1, 2))
         def test_sealed_response(self): self.rejects(self.rows + [{'x': 1767225600, 'y': 1}], 'OUTSIDE_REQUEST_WINDOW')
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContractTests)
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
