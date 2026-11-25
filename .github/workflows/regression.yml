@@ -1,0 +1,31 @@
+name: Public historical-data regression
+on:
+  push:
+    paths: ['audit.py', 'replay.py', 'test_regression.py', '.github/workflows/regression.yml']
+  workflow_dispatch:
+    inputs:
+      month:
+        description: 'One historical TRAIN month (2020-01 to 2025-12)'
+        default: '2020-01'
+        type: string
+  schedule:
+    - cron: '23 3 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: public-historical-regression
+  cancel-in-progress: false
+jobs:
+  regression:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest -v test_regression.py
+      - name: Verify one Binance archive
+        env:
+          MONTH: ${{ inputs.month || '2020-01' }}
+        run: python3 audit.py --month "$MONTH" --download
