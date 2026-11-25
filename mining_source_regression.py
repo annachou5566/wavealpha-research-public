@@ -92,5 +92,94 @@ def mining_legacy():
     print(json.dumps(dict(source='Blockchain.com legacy public charts',rows=len(data),sha256_by_request=hashes,source_gate='coverage_only_no_vintage')),flush=True)
     return data
 
-if __name__=='__main__':screen(mining_legacy(),prices())
+# Source contract regression: no research is permitted on an unqualified source.
+class SourceContractError(ValueError):
+    pass
+
+def validate_chart(obj, a, b):
+    if not START <= a <= b <= END:
+        raise SourceContractError('REQUEST_OUTSIDE_TRAIN')
+    if not isinstance(obj, dict) or not isinstance(obj.get('values'), list):
+        raise SourceContractError('INVALID_SCHEMA')
+    vals = {}
+    for r in obj['values']:
+        if not isinstance(r, dict) or type(r.get('x')) is not int or type(r.get('y')) not in (int, float):
+            raise SourceContractError('INVALID_ROW')
+        try:
+            t = dt.datetime.fromtimestamp(r['x'], dt.timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            raise SourceContractError('INVALID_TIMESTAMP') from None
+        d = t.date()
+        if not a <= d <= b:
+            raise SourceContractError('OUTSIDE_REQUEST_WINDOW')
+        if d in vals:
+            raise SourceContractError('DUPLICATE_DAY')
+        v = float(r['y'])
+        if not math.isfinite(v) or v <= 0:
+            raise SourceContractError('INVALID_METRIC')
+        vals[d] = v
+    if set(vals) != set(days(a, b)):
+        raise SourceContractError('DAILY_COVERAGE_GAP')
+    return vals
+
+def preflight():
+    import urllib.error
+    a, b = dt.date(2020, 1, 1), dt.date(2020, 1, 7)
+    receipts = []
+    for metric in ('difficulty', 'hash-rate'):
+        params = dict(start=str(a), timespan='7days', sampled='false', format='json')
+        try:
+            raw = get('https://api.blockchain.info/charts/' + metric + '?' + urllib.parse.urlencode(params))
+            vals = validate_chart(json.loads(raw), a, b)
+            receipts.append(dict(metric=metric, status='SAMPLE_VALID', rows=len(vals), sha256=hashlib.sha256(raw).hexdigest()))
+        except urllib.error.HTTPError as exc:
+            receipts.append(dict(metric=metric, status='SOURCE_HOLD', reason='HTTP_' + str(exc.code)))
+        except (urllib.error.URLError, TimeoutError):
+            receipts.append(dict(metric=metric, status='SOURCE_HOLD', reason='NETWORK_UNAVAILABLE'))
+        except (SourceContractError, json.JSONDecodeError) as exc:
+            receipts.append(dict(metric=metric, status='SOURCE_HOLD', reason=str(exc) if isinstance(exc, SourceContractError) else 'INVALID_JSON'))
+    # This is a sample diagnostic, not a qualified source or a backtest.
+    print(json.dumps(dict(status='SOURCE_HOLD', sample_valid=sum(r['status']=='SAMPLE_VALID' for r in receipts), as_of_verified=False, vectors=0, receipts=receipts)), flush=True)
+    return 3
+
+def selftest():
+    import unittest
+    class ContractTests(unittest.TestCase):
+        def setUp(self):
+            self.a, self.b = dt.date(2020, 1, 1), dt.date(2020, 1, 3)
+            self.rows = [{'x': int(dt.datetime.combine(d, dt.time(), dt.timezone.utc).timestamp()), 'y': 1.0} for d in days(self.a, self.b)]
+        def validate(self, rows):
+            return validate_chart({'values': rows}, self.a, self.b)
+        def rejects(self, rows, reason):
+            with self.assertRaisesRegex(SourceContractError, '^' + reason + '
+
+):
+                self.validate(rows)
+        def test_valid(self): self.assertEqual(len(self.validate(self.rows)), 3)
+        def test_reverse_order(self): self.assertEqual(len(self.validate(self.rows[::-1])), 3)
+        def test_missing(self): self.rejects(self.rows[:-1], 'DAILY_COVERAGE_GAP')
+        def test_duplicate(self): self.rejects(self.rows + [self.rows[0]], 'DUPLICATE_DAY')
+        def test_outside(self): self.rejects(self.rows + [{'x': self.rows[0]['x'] - 86400, 'y': 1}], 'OUTSIDE_REQUEST_WINDOW')
+        def test_intraday_duplicate(self): self.rejects(self.rows + [{'x': self.rows[0]['x'] + 3600, 'y': 1}], 'DUPLICATE_DAY')
+        def test_nonpositive(self): self.rejects([dict(self.rows[0], y=0)] + self.rows[1:], 'INVALID_METRIC')
+        def test_nan(self): self.rejects([dict(self.rows[0], y=float('nan'))] + self.rows[1:], 'INVALID_METRIC')
+        def test_schema(self):
+            with self.assertRaisesRegex(SourceContractError, '^INVALID_SCHEMA
+
+): validate_chart({}, self.a, self.b)
+        def test_timestamp_type(self): self.rejects([dict(self.rows[0], x='1577836800')] + self.rows[1:], 'INVALID_ROW')
+        def test_sealed_request(self):
+            with self.assertRaisesRegex(SourceContractError, '^REQUEST_OUTSIDE_TRAIN
+
+): validate_chart({}, dt.date(2026, 1, 1), dt.date(2026, 1, 2))
+        def test_sealed_response(self): self.rejects(self.rows + [{'x': 1767225600, 'y': 1}], 'OUTSIDE_REQUEST_WINDOW')
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContractTests)
+    return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--preflight', action='store_true', help='Explicit seven-day source diagnostic; always returns SOURCE HOLD pending as-of verification')
+    args = parser.parse_args()
+    raise SystemExit(preflight() if args.preflight else selftest())
 
